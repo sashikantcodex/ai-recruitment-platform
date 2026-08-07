@@ -52,6 +52,6 @@ describe("departments.controller — CRUD", () => {
       mockRes() as never,
       nextFn as never,
     );
-    expect(nextFn.mock.calls[0][0]).toMatchObject({ code: "NOT_FOUND" });
+    expect(nextFn.mock.calls[0]?.[0]).toMatchObject({ code: "NOT_FOUND" });
   });
 });

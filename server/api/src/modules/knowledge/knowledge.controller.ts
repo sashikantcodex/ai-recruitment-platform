@@ -11,7 +11,13 @@ export const ingest = asyncHandler(async (req: Request, res: Response) => {
       category: z.string().optional(),
     })
     .parse(req.body);
-  res.status(201).json(await ragIngest(body));
+  res.status(201).json(
+    await ragIngest({
+      title: body.title,
+      content: body.content,
+      ...(body.category !== undefined ? { category: body.category } : {}),
+    }),
+  );
 });
 
 export const query = asyncHandler(async (req: Request, res: Response) => {
@@ -21,5 +27,10 @@ export const query = asyncHandler(async (req: Request, res: Response) => {
       topK: z.number().int().min(1).max(20).optional(),
     })
     .parse(req.body);
-  res.json(await ragQuery(body));
+  res.json(
+    await ragQuery({
+      query: body.query,
+      ...(body.topK !== undefined ? { topK: body.topK } : {}),
+    }),
+  );
 });

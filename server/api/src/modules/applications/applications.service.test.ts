@@ -77,7 +77,7 @@ describe("applications.service — apply / list / stage", () => {
         mimetype: "application/pdf",
       } as Express.Multer.File,
     });
-    expect(app.stage).toBe("screened");
+    expect(app?.stage).toBe("screened");
   });
 
   it("listApplications and getApplicationById", async () => {

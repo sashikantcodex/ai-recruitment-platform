@@ -127,7 +127,13 @@ export async function runAgent(
   name: "recruiter" | "interview" | "hr",
   payload: Record<string, unknown>,
 ) {
-  const { data } = await http.post(`/agents/${name}/run`, payload);
+  const { data } = await http.post<{
+    advisory?: unknown;
+    executed?: unknown;
+    agent?: string;
+    status?: string;
+    result?: unknown;
+  }>(`/agents/${name}/run`, payload);
   return data;
 }
 

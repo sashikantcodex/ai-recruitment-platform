@@ -22,7 +22,7 @@ describe("applications.controller — POST apply / GET / PATCH stage", () => {
       mockRes() as never,
       nextFn as never,
     );
-    expect(nextFn.mock.calls[0][0]).toMatchObject({ code: "RESUME_REQUIRED" });
+    expect(nextFn.mock.calls[0]?.[0]).toMatchObject({ code: "RESUME_REQUIRED" });
   });
 
   it("applyWithResume / list / get / updateStage", async () => {

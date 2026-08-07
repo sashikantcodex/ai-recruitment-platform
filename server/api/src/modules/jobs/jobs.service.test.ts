@@ -96,6 +96,6 @@ describe("jobs.service — CRUD + submit/approve/close + rankings", () => {
     Application.find.mockReturnValue(mockQuery([{ aiScore: 90 }]));
     const { getJobRankings } = await import("./jobs.service.ts");
     const rankings = await getJobRankings("j1");
-    expect(rankings[0].aiScore).toBe(90);
+    expect(rankings[0]?.aiScore).toBe(90);
   });
 });

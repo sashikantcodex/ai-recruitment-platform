@@ -12,7 +12,11 @@ const schema = z.object({
 
 export const createDepartment = asyncHandler(async (req: Request, res: Response) => {
   const body = schema.parse(req.body);
-  const dept = await Department.create(body);
+  const dept = await Department.create({
+    name: body.name,
+    code: body.code,
+    ...(body.description !== undefined ? { description: body.description } : {}),
+  });
   res.status(201).json(dept);
 });
 
@@ -24,7 +28,15 @@ export const updateDepartment = asyncHandler(async (req: Request, res: Response)
   const id = req.params.id;
   if (typeof id !== "string") throw new AppError("Invalid id", 400, "INVALID_ID");
   const body = schema.partial().parse(req.body);
-  const dept = await Department.findByIdAndUpdate(id, body, { new: true });
+  const dept = await Department.findByIdAndUpdate(
+    id,
+    {
+      ...(body.name !== undefined ? { name: body.name } : {}),
+      ...(body.code !== undefined ? { code: body.code } : {}),
+      ...(body.description !== undefined ? { description: body.description } : {}),
+    },
+    { new: true },
+  );
   if (!dept) throw new AppError("Department not found", 404, "NOT_FOUND");
   res.json(dept);
 });

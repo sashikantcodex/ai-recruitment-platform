@@ -2,26 +2,102 @@
 
 import Alert from "@mui/material/Alert";
 import Button from "@mui/material/Button";
+import Checkbox from "@mui/material/Checkbox";
+import FormControlLabel from "@mui/material/FormControlLabel";
 import MenuItem from "@mui/material/MenuItem";
 import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { listApplications } from "@/services/applications.service";
+import { getJobs } from "@/services/jobs.service";
 import { runAgent } from "@/services/platform.service";
+import type { Application, Job } from "@/types";
+
+type AgentName = "recruiter" | "interview" | "hr";
 
 export default function AgentsPage() {
-  const [agent, setAgent] = useState<"recruiter" | "interview" | "hr">("recruiter");
-  const [jdText, setJdText] = useState("Senior React Engineer building ATS products");
-  const [result, setResult] = useState<string>("");
+  const [agent, setAgent] = useState<AgentName>("recruiter");
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [applications, setApplications] = useState<Application[]>([]);
+  const [jobId, setJobId] = useState("");
+  const [applicationId, setApplicationId] = useState("");
+  const [execute, setExecute] = useState(true);
+  const [sendOffer, setSendOffer] = useState(true);
+  const [acceptOffer, setAcceptOffer] = useState(false);
+  const [schedule, setSchedule] = useState(true);
+  const [result, setResult] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [running, setRunning] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const [jobList, apps] = await Promise.all([getJobs(), listApplications()]);
+      setJobs(jobList);
+      setApplications(apps);
+      if (!jobId && jobList[0]) setJobId(jobList[0]._id);
+    } catch {
+      setError("Failed to load jobs/applications");
+    }
+  }, [jobId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const appsForJob = useMemo(
+    () =>
+      applications.filter((app) => {
+        const id =
+          typeof app.jobId === "object" && app.jobId
+            ? app.jobId._id
+            : String(app.jobId ?? "");
+        return !jobId || id === jobId;
+      }),
+    [applications, jobId],
+  );
+
+  useEffect(() => {
+    if (applicationId && !appsForJob.some((a) => a._id === applicationId)) {
+      setApplicationId(appsForJob[0]?._id ?? "");
+    } else if (!applicationId && appsForJob[0]) {
+      setApplicationId(appsForJob[0]._id);
+    }
+  }, [appsForJob, applicationId]);
+
+  async function handleRun() {
+    setRunning(true);
+    setError(null);
+    try {
+      const scheduledAt = schedule
+        ? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+        : undefined;
+      const data = await runAgent(agent, {
+        execute,
+        jobId: jobId || undefined,
+        applicationId: applicationId || undefined,
+        ...(agent === "interview" && scheduledAt ? { scheduledAt, durationMinutes: 60 } : {}),
+        ...(agent === "hr"
+          ? { send: sendOffer || acceptOffer, accept: acceptOffer }
+          : {}),
+      });
+      setResult(JSON.stringify(data, null, 2));
+      await load();
+    } catch {
+      setError("Agent run failed — check API/AI are running and required IDs are set.");
+    } finally {
+      setRunning(false);
+    }
+  }
 
   return (
     <Stack spacing={2}>
       <Typography variant="h5">AI Agents Console</Typography>
       <Alert severity="info">
-        Recruiter, Interview, and HR agents orchestrate sourcing, questions/scorecards, and
-        offer/onboarding drafts via the FastAPI service.
+        Agents can <strong>advise</strong> (AI JSON) or <strong>execute</strong> real pipeline
+        steps: Recruiter shortlists → Interview prepares/schedules → HR drafts/sends/accepts
+        offers (and creates onboarding on accept).
       </Alert>
       {error ? <Alert severity="error">{error}</Alert> : null}
 
@@ -31,39 +107,97 @@ export default function AgentsPage() {
             select
             label="Agent"
             value={agent}
-            onChange={(e) => setAgent(e.target.value as typeof agent)}
+            onChange={(e) => setAgent(e.target.value as AgentName)}
           >
-            <MenuItem value="recruiter">Recruiter Agent</MenuItem>
-            <MenuItem value="interview">Interview Agent</MenuItem>
-            <MenuItem value="hr">HR Agent</MenuItem>
+            <MenuItem value="recruiter">Recruiter — shortlist top applicant</MenuItem>
+            <MenuItem value="interview">Interview — create + questions + schedule</MenuItem>
+            <MenuItem value="hr">HR — draft offer (+ send/accept)</MenuItem>
           </TextField>
+
           <TextField
-            label="Job / context"
-            value={jdText}
-            onChange={(e) => setJdText(e.target.value)}
-            multiline
-            minRows={3}
-          />
-          <Button
-            onClick={async () => {
-              try {
-                setError(null);
-                const data = await runAgent(agent, {
-                  jdText,
-                  title: jdText,
-                  skills: ["React", "TypeScript"],
-                  candidates: [],
-                });
-                setResult(JSON.stringify(data, null, 2));
-              } catch {
-                setError("Agent run failed — is the AI service running?");
-              }
-            }}
+            select
+            label="Job"
+            value={jobId}
+            onChange={(e) => setJobId(e.target.value)}
+            helperText="Used by Recruiter rankings and AI context"
           >
-            Run Agent
+            {jobs.map((job) => (
+              <MenuItem key={job._id} value={job._id}>
+                {job.title} ({job.status})
+              </MenuItem>
+            ))}
+          </TextField>
+
+          {(agent === "interview" || agent === "hr" || agent === "recruiter") && (
+            <TextField
+              select
+              label="Application"
+              value={applicationId}
+              onChange={(e) => setApplicationId(e.target.value)}
+              helperText={
+                agent === "recruiter"
+                  ? "Optional — defaults to top AI-ranked application"
+                  : "Required for Interview / HR execute"
+              }
+            >
+              {appsForJob.map((app) => (
+                <MenuItem key={app._id} value={app._id}>
+                  {(app.candidateId?.name ?? "Candidate") +
+                    ` — ${app.stage}` +
+                    (app.aiScore != null ? ` (score ${app.aiScore})` : "")}
+                </MenuItem>
+              ))}
+            </TextField>
+          )}
+
+          <FormControlLabel
+            control={
+              <Checkbox checked={execute} onChange={(e) => setExecute(e.target.checked)} />
+            }
+            label="Execute pipeline actions (not advisory-only)"
+          />
+
+          {agent === "interview" && execute ? (
+            <FormControlLabel
+              control={
+                <Checkbox checked={schedule} onChange={(e) => setSchedule(e.target.checked)} />
+              }
+              label="Also schedule interview for tomorrow"
+            />
+          ) : null}
+
+          {agent === "hr" && execute ? (
+            <Stack direction="row" spacing={2}>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={sendOffer}
+                    onChange={(e) => setSendOffer(e.target.checked)}
+                  />
+                }
+                label="Send offer (e-sign stub)"
+              />
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={acceptOffer}
+                    onChange={(e) => setAcceptOffer(e.target.checked)}
+                  />
+                }
+                label="Accept offer → onboarding"
+              />
+            </Stack>
+          ) : null}
+
+          <Button onClick={handleRun} disabled={running || (execute && agent !== "recruiter" && !applicationId)}>
+            {running ? "Running..." : execute ? "Run Agent + Execute" : "Run Advisory Only"}
           </Button>
+
           {result ? (
             <Paper variant="outlined" sx={{ p: 2, bgcolor: "grey.50" }}>
+              <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                Result (advisory + executed)
+              </Typography>
               <pre style={{ margin: 0, whiteSpace: "pre-wrap" }}>{result}</pre>
             </Paper>
           ) : null}

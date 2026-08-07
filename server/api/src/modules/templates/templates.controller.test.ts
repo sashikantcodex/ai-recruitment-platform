@@ -50,6 +50,6 @@ describe("templates.controller — CRUD", () => {
     const { getTemplate } = await import("./templates.controller.ts");
     const nextFn = vi.fn();
     await getTemplate({ params: { id: "x" } } as never, mockRes() as never, nextFn as never);
-    expect(nextFn.mock.calls[0][0]).toMatchObject({ code: "NOT_FOUND" });
+    expect(nextFn.mock.calls[0]?.[0]).toMatchObject({ code: "NOT_FOUND" });
   });
 });

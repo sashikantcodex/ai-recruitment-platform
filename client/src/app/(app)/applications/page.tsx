@@ -19,8 +19,9 @@ import {
   updateApplicationStage,
 } from "@/services/applications.service";
 import { getJobs } from "@/services/jobs.service";
-import { APPLICATION_STAGES, type Application, type ApplicationStage, type Job } from "@/types";
-import { formatScore, stageLabel } from "@/utils/format";
+import type { Application, ApplicationStage, Job } from "@/types";
+import { formatScore, selectableStages, stageLabel } from "@/utils/format";
+import { isAxiosError } from "axios";
 
 export default function ApplicationsPage() {
   const [applications, setApplications] = useState<Application[]>([]);
@@ -89,26 +90,41 @@ export default function ApplicationsPage() {
         headerName: "Advance",
         width: 180,
         sortable: false,
-        renderCell: (params) => (
-          <TextField
-            select
-            size="small"
-            value={params.row.stage}
-            onChange={(event) => {
-              void updateApplicationStage(
-                params.row._id,
-                event.target.value as ApplicationStage,
-              ).then(loadData);
-            }}
-            sx={{ width: 160 }}
-          >
-            {APPLICATION_STAGES.map((stage) => (
-              <MenuItem key={stage} value={stage}>
-                {stageLabel(stage)}
-              </MenuItem>
-            ))}
-          </TextField>
-        ),
+        renderCell: (params) => {
+          const options = selectableStages(String(params.row.stage));
+          return (
+            <TextField
+              select
+              size="small"
+              value={params.row.stage}
+              onChange={(event) => {
+                const next = event.target.value as ApplicationStage;
+                if (next === params.row.stage) return;
+                void updateApplicationStage(params.row._id, next)
+                  .then(() => {
+                    setError(null);
+                    return loadData();
+                  })
+                  .catch((err: unknown) => {
+                    const message = isAxiosError(err)
+                      ? (err.response?.data as { message?: string } | undefined)?.message
+                      : undefined;
+                    setError(
+                      message ??
+                        "Invalid stage move. Advance one step at a time (e.g. Applied → Screened → Interview).",
+                    );
+                  });
+              }}
+              sx={{ width: 160 }}
+            >
+              {options.map((stage) => (
+                <MenuItem key={stage} value={stage}>
+                  {stageLabel(stage)}
+                </MenuItem>
+              ))}
+            </TextField>
+          );
+        },
       },
     ],
     [loadData],

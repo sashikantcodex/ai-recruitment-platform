@@ -93,7 +93,19 @@ export const scorecard = asyncHandler(async (req: Request, res: Response) => {
       recommendation: z.enum(["strong_yes", "yes", "no", "strong_no"]),
     })
     .parse(req.body);
-  res.json(await service.saveScorecard(id(req.params.id), body, req.user.id));
+  res.json(
+    await service.saveScorecard(
+      id(req.params.id),
+      {
+        technical: body.technical,
+        communication: body.communication,
+        culture: body.culture,
+        recommendation: body.recommendation,
+        ...(body.notes !== undefined ? { notes: body.notes } : {}),
+      },
+      req.user.id,
+    ),
+  );
 });
 
 export const notesSummary = asyncHandler(async (req: Request, res: Response) => {

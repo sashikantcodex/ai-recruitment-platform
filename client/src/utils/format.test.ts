@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatScore, isApplicationStage, joinList, stageLabel } from "./format";
+import { formatScore, isApplicationStage, joinList, selectableStages, stageLabel } from "./format";
 
 describe("formatScore", () => {
   it("formats numeric scores", () => {
@@ -30,5 +30,11 @@ describe("stage helpers", () => {
   it("validates application stages", () => {
     expect(isApplicationStage("interview")).toBe(true);
     expect(isApplicationStage("unknown")).toBe(false);
+  });
+
+  it("limits selectable stages to valid advances", () => {
+    expect(selectableStages("applied")).toEqual(["applied", "screened", "rejected"]);
+    expect(selectableStages("screened")).toContain("interview");
+    expect(selectableStages("screened")).not.toContain("hired");
   });
 });

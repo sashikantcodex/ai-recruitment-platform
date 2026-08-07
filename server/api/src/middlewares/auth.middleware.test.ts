@@ -12,7 +12,9 @@ describe("authenticate middleware", () => {
     const next = vi.fn() as unknown as NextFunction;
     authenticate({ headers: {} } as Request, {} as Response, next);
     expect(next).toHaveBeenCalled();
-    const err = (next as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const err = (next as unknown as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as {
+      statusCode: number;
+    };
     expect(err.statusCode).toBe(401);
   });
 

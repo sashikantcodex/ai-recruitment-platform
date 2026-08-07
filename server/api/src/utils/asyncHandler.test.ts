@@ -4,7 +4,7 @@ import type { Request, Response, NextFunction } from "express";
 
 describe("asyncHandler", () => {
   it("forwards resolved handlers", async () => {
-    const handler = asyncHandler(async (_req, res) => {
+    const handler = asyncHandler(async (_req: Request, res: Response) => {
       res.status(200).json({ ok: true });
     });
 

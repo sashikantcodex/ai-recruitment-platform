@@ -15,7 +15,14 @@ const schema = z.object({
 export const createTemplate = asyncHandler(async (req: Request, res: Response) => {
   if (!req.user) throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
   const body = schema.parse(req.body);
-  const template = await JdTemplate.create({ ...body, createdBy: req.user.id });
+  const template = await JdTemplate.create({
+    name: body.name,
+    title: body.title,
+    description: body.description,
+    createdBy: req.user.id,
+    ...(body.skills !== undefined ? { skills: body.skills } : {}),
+    ...(body.department !== undefined ? { department: body.department } : {}),
+  });
   res.status(201).json(template);
 });
 
