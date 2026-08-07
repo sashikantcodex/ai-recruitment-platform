@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ats-ai
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ats-ai
+  template:
+    metadata:
+      labels:
+        app: ats-ai
+    spec:
+      containers:
+        - name: ai
+          image: ats-ai-platform/ai:latest
+          ports:
+            - containerPort: 8000
+          env:
+            - name: AI_SERVICE_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: ats-secrets
+                  key: AI_SERVICE_TOKEN
+            - name: AI_MODE
+              value: mock
+          volumeMounts:
+            - name: chroma
+              mountPath: /app/data/chroma
+      volumes:
+        - name: chroma
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ats-ai
+spec:
+  selector:
+    app: ats-ai
+  ports:
+    - port: 8000
+      targetPort: 8000

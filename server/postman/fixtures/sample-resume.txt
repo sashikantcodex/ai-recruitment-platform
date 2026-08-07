@@ -1,0 +1,4 @@
+Jane Candidate
+Email: jane@example.com
+Skills: Node.js, TypeScript, MongoDB
+Experience: 3 years backend development

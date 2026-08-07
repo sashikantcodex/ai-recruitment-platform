@@ -1,0 +1,13 @@
+# Example Prometheus scrape config for ATS services (API + AI).
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: ats-api
+    static_configs:
+      - targets: ["ats-api:4000"]
+    metrics_path: /health
+  - job_name: ats-ai
+    static_configs:
+      - targets: ["ats-ai:8000"]
+    metrics_path: /health

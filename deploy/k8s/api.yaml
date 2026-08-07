@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ats-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ats-api
+  template:
+    metadata:
+      labels:
+        app: ats-api
+    spec:
+      containers:
+        - name: api
+          image: ats-ai-platform/api:latest
+          ports:
+            - containerPort: 4000
+          env:
+            - name: PORT
+              value: "4000"
+            - name: MONGODB_URI
+              value: mongodb://mongo:27017/ai-ats
+            - name: AI_SERVICE_URL
+              value: http://ats-ai:8000
+            - name: AI_SERVICE_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: ats-secrets
+                  key: AI_SERVICE_TOKEN
+            - name: JWT_ACCESS_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: ats-secrets
+                  key: JWT_ACCESS_SECRET
+            - name: JWT_REFRESH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: ats-secrets
+                  key: JWT_REFRESH_SECRET
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ats-api
+spec:
+  selector:
+    app: ats-api
+  ports:
+    - port: 4000
+      targetPort: 4000

@@ -1,0 +1,16 @@
+{
+  "title": "ATS AI Platform Overview",
+  "timezone": "browser",
+  "panels": [
+    {
+      "type": "stat",
+      "title": "API Health Target",
+      "targets": [{ "expr": "up{job=\"ats-api\"}" }]
+    },
+    {
+      "type": "stat",
+      "title": "AI Health Target",
+      "targets": [{ "expr": "up{job=\"ats-ai\"}" }]
+    }
+  ]
+}

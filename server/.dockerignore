@@ -1,0 +1,14 @@
+node_modules
+npm-debug.log*
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+uploads/*
+!uploads/.gitkeep
+ai/.venv
+ai/__pycache__
+postman
+Dockerfile
+.dockerignore

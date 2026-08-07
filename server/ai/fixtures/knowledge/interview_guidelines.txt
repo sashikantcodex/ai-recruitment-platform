@@ -1,0 +1,5 @@
+Interview Guidelines
+====================
+Use structured interviews with the same core questions for comparable roles.
+Score independently before panel debrief. Avoid illegal questions about age,
+family status, religion, or health.

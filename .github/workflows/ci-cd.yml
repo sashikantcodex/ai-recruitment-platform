@@ -1,0 +1,89 @@
+name: CI/CD — ATS AI Platform
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+  workflow_dispatch:
+
+env:
+  AI_SERVICE_TOKEN: test-token
+  AI_MODE: mock
+
+jobs:
+  test-api:
+    name: Unit tests — Express API
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci
+      - run: npm test
+
+  test-client:
+    name: Unit tests — Next.js client
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:4000/api/v1
+
+  test-ai:
+    name: Unit tests — Python AI
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server/ai
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt -r requirements-dev.txt
+      - run: pytest -q
+
+  docker-build:
+    name: Docker build — full stack
+    runs-on: ubuntu-latest
+    needs: [test-api, test-client, test-ai]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build images
+        run: docker compose build
+      - name: Smoke compose config
+        run: docker compose config
+
+  deploy-staging:
+    name: Deploy staging (manual gate)
+    runs-on: ubuntu-latest
+    needs: [docker-build]
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish deployment artifact metadata
+        run: |
+          echo "Images built for ats-ai-platform"
+          echo "Deploy hook: replace this step with your registry push / cloud deploy."
+          echo "Suggested:"
+          echo "  docker compose push"
+          echo "  OR azure/aws/k8s deploy using the built images"

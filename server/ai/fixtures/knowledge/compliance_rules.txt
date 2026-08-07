@@ -1,0 +1,5 @@
+Compliance Rules
+================
+All personal candidate data is confidential. Resume files must be stored securely.
+Background checks require candidate consent. Offer letters require e-signature
+before onboarding access is provisioned.

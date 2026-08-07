@@ -1,0 +1,7 @@
+Salary Bands
+============
+Junior Engineer: 65k-90k USD
+Mid Engineer: 90k-130k USD
+Senior Engineer: 130k-170k USD
+Staff Engineer: 170k-220k USD
+Offers should land within band mid-point unless exceptional skills are documented.

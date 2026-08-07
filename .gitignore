@@ -1,0 +1,55 @@
+# Dependencies
+node_modules/
+.venv/
+venv/
+
+# Env / secrets (keep *.example)
+.env
+.env.local
+.env.*.local
+**/.env
+!**/.env.example
+!.env.example
+
+# Builds / caches
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+.turbo/
+.cache/
+.pytest_cache/
+.mypy_cache/
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Test / coverage reports (generate locally)
+coverage/
+**/coverage/
+.nyc_output/
+htmlcov/
+.coverage
+*.lcov
+
+# Runtime / local data
+uploads/
+**/uploads/
+server/ai/data/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.pem
+
+# Docker / local overrides
+docker-compose.override.yml
