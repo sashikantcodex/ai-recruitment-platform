@@ -10,6 +10,10 @@ import offersRoutes from "../../modules/offers/offers.routes.ts";
 import onboardingRoutes from "../../modules/onboarding/onboarding.routes.ts";
 import knowledgeRoutes from "../../modules/knowledge/knowledge.routes.ts";
 import agentsRoutes from "../../modules/agents/agents.routes.ts";
+import sourcingRoutes from "../../modules/sourcing/sourcing.routes.ts";
+import assessmentsRoutes from "../../modules/assessments/assessments.routes.ts";
+import evaluationsRoutes from "../../modules/evaluations/evaluations.routes.ts";
+import publicRoutes from "../../modules/public/public.routes.ts";
 
 /**
  * Versioned REST surface: `/api/v1/*`
@@ -28,5 +32,10 @@ router.use("/offers", offersRoutes);
 router.use("/onboarding", onboardingRoutes);
 router.use("/knowledge", knowledgeRoutes);
 router.use("/agents", agentsRoutes);
+router.use("/sourcing", sourcingRoutes);
+router.use("/assessments", assessmentsRoutes);
+router.use("/evaluations", evaluationsRoutes);
+// Unauthenticated candidate surface (careers board, self-apply, token-gated tests).
+router.use("/public", publicRoutes);
 
 export default router;

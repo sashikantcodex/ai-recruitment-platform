@@ -15,6 +15,7 @@ export const create = asyncHandler(async (req: Request, res: Response) => {
     .object({
       applicationId: z.string(),
       panelists: z.array(z.string()).optional(),
+      mode: z.enum(["live", "ai"]).optional(),
     })
     .parse(req.body);
   res.status(201).json(
@@ -22,6 +23,7 @@ export const create = asyncHandler(async (req: Request, res: Response) => {
       applicationId: body.applicationId,
       createdBy: req.user.id,
       ...(body.panelists ? { panelists: body.panelists } : {}),
+      ...(body.mode ? { mode: body.mode } : {}),
     }),
   );
 });
@@ -110,4 +112,35 @@ export const scorecard = asyncHandler(async (req: Request, res: Response) => {
 
 export const notesSummary = asyncHandler(async (req: Request, res: Response) => {
   res.json(await service.summarizeNotes(id(req.params.id)));
+});
+
+// --- AI-conducted interview --------------------------------------------
+
+export const inviteAi = asyncHandler(async (req: Request, res: Response) => {
+  const body = z
+    .object({
+      maxQuestions: z.number().int().min(1).max(20).optional(),
+      validDays: z.number().int().min(1).max(60).optional(),
+    })
+    .parse(req.body ?? {});
+  res.json(await service.inviteAiInterview(id(req.params.id), body));
+});
+
+export const aiSession = asyncHandler(async (req: Request, res: Response) => {
+  res.json(await service.getAiSession(id(req.params.id)));
+});
+
+// Candidate-facing (token auth, no login).
+
+export const publicGetSession = asyncHandler(async (req: Request, res: Response) => {
+  res.json(await service.getAiSessionByToken(id(req.params.token)));
+});
+
+export const publicStartSession = asyncHandler(async (req: Request, res: Response) => {
+  res.json(await service.startAiSession(id(req.params.token)));
+});
+
+export const publicAnswer = asyncHandler(async (req: Request, res: Response) => {
+  const body = z.object({ answer: z.string().min(1) }).parse(req.body);
+  res.json(await service.answerAiSession(id(req.params.token), body.answer));
 });

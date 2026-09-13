@@ -1,5 +1,11 @@
 name: CI/CD — ATS AI Platform
 
+# Quality gates run in a strict chain; each stage only starts once the previous
+# one is green, so a failure stops the pipeline at the cheapest possible point:
+#
+#   typescript → eslint → unit tests → API integration tests
+#     → next build → docker build → npm audit → image scan → deploy
+#
 on:
   push:
     branches: [main, master, develop]
@@ -7,83 +13,330 @@ on:
     branches: [main, master, develop]
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  security-events: write
+
 env:
-  AI_SERVICE_TOKEN: test-token
+  NODE_VERSION: "22"
+  PYTHON_VERSION: "3.12"
+  AI_SERVICE_TOKEN: ci-service-token
   AI_MODE: mock
 
 jobs:
-  test-api:
-    name: Unit tests — Express API
+  # ---------------------------------------------------------------- 1. types
+  typescript:
+    name: 1 · TypeScript check
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: server
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: ${{ env.NODE_VERSION }}
           cache: npm
-          cache-dependency-path: server/package-lock.json
-      - run: npm ci
-      - run: npm test
+          cache-dependency-path: |
+            server/package-lock.json
+            client/package-lock.json
 
-  test-client:
-    name: Unit tests — Next.js client
-    runs-on: ubuntu-latest
-    defaults:
-      run:
+      - name: Install API dependencies
+        working-directory: server
+        run: npm ci
+      - name: tsc --noEmit (Express API)
+        working-directory: server
+        run: npx tsc --noEmit -p tsconfig.json
+
+      - name: Install client dependencies
         working-directory: client
+        run: npm ci
+      - name: tsc --noEmit (Next.js client)
+        working-directory: client
+        run: npx tsc --noEmit
+
+  # --------------------------------------------------------------- 2. eslint
+  eslint:
+    name: 2 · ESLint
+    runs-on: ubuntu-latest
+    needs: [typescript]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: client/package-lock.json
-      - run: npm ci
-      - run: npm test
-      - run: npm run build
-        env:
-          NEXT_PUBLIC_API_URL: http://localhost:4000/api/v1
+      - name: Install client dependencies
+        working-directory: client
+        run: npm ci
+      - name: Lint (no warnings tolerated)
+        working-directory: client
+        run: npx eslint src --max-warnings 0
 
-  test-ai:
-    name: Unit tests — Python AI
+  # ---------------------------------------------------------- 3. unit tests
+  unit-tests:
+    name: 3 · Unit tests (${{ matrix.package }})
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: server/ai
+    needs: [eslint]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - package: api
+            dir: server
+          - package: client
+            dir: client
+          - package: ai
+            dir: server/ai
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        if: matrix.package != 'ai'
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: ${{ matrix.dir }}/package-lock.json
+      - name: Run Node unit tests
+        if: matrix.package != 'ai'
+        working-directory: ${{ matrix.dir }}
+        run: |
+          npm ci
+          npm test
+
+      - uses: actions/setup-python@v5
+        if: matrix.package == 'ai'
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - name: Run Python unit tests
+        if: matrix.package == 'ai'
+        working-directory: server/ai
+        run: |
+          pip install -r requirements.txt -r requirements-dev.txt
+          pytest -q
+
+  # ------------------------------------------------- 4. API integration tests
+  integration-tests:
+    name: 4 · API integration tests (15-stage pipeline)
+    runs-on: ubuntu-latest
+    needs: [unit-tests]
+    services:
+      mongo:
+        image: mongo:7
+        ports: ["27017:27017"]
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1}).ok'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PORT: "4000"
+      MONGODB_URI: mongodb://127.0.0.1:27017/ats-ci
+      JWT_ACCESS_SECRET: ci-access-secret
+      JWT_REFRESH_SECRET: ci-refresh-secret
+      AI_SERVICE_URL: http://127.0.0.1:8000
+      UPLOAD_DIR: ./uploads-ci
+      STORAGE_DRIVER: local
+      NODE_ENV: development
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: server/package-lock.json
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-      - run: pip install -r requirements.txt -r requirements-dev.txt
-      - run: pytest -q
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
 
-  docker-build:
-    name: Docker build — full stack
+      - name: Install dependencies
+        run: |
+          npm ci --prefix server
+          pip install -r server/ai/requirements.txt
+
+      - name: Start the AI service
+        working-directory: server/ai
+        run: |
+          nohup python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 > "$RUNNER_TEMP/ai.log" 2>&1 &
+          for _ in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8000/health && break
+            sleep 1
+          done
+          curl -sf http://127.0.0.1:8000/health || { cat "$RUNNER_TEMP/ai.log"; exit 1; }
+
+      - name: Start the Express API
+        working-directory: server
+        run: |
+          nohup npm start > "$RUNNER_TEMP/api.log" 2>&1 &
+          for _ in $(seq 1 30); do
+            curl -sf http://127.0.0.1:4000/health && break
+            sleep 1
+          done
+          curl -sf http://127.0.0.1:4000/health || { cat "$RUNNER_TEMP/api.log"; exit 1; }
+
+      - name: Walk all 15 hiring pipeline stages
+        env:
+          API_BASE_URL: http://127.0.0.1:4000
+        run: bash server/scripts/integration/pipeline.e2e.sh
+
+      - name: Dump service logs on failure
+        if: failure()
+        run: |
+          echo "===== API ====="; cat "$RUNNER_TEMP/api.log" || true
+          echo "===== AI  ====="; cat "$RUNNER_TEMP/ai.log" || true
+
+  # ------------------------------------------------------- 5. Next.js build
+  next-build:
+    name: 5 · Next.js build
     runs-on: ubuntu-latest
-    needs: [test-api, test-client, test-ai]
+    needs: [integration-tests]
     steps:
       - uses: actions/checkout@v4
-      - name: Build images
-        run: docker compose build
-      - name: Smoke compose config
-        run: docker compose config
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - name: Build
+        working-directory: client
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:4000/api/v1
+        run: |
+          npm ci
+          npm run build
 
+  # -------------------------------------------------------- 6. docker build
+  docker-build:
+    name: 6 · Docker build (${{ matrix.image }})
+    runs-on: ubuntu-latest
+    needs: [next-build]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: api
+            context: server
+            dockerfile: server/Dockerfile
+          - image: ai
+            context: server/ai
+            dockerfile: server/ai/Dockerfile
+          - image: client
+            context: client
+            dockerfile: client/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Validate the compose file
+        run: docker compose config --quiet
+
+      - name: Build ${{ matrix.image }} image
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: false
+          load: true
+          tags: ats-${{ matrix.image }}:${{ github.sha }}
+          # The client bakes the API URL into the browser bundle at build time.
+          build-args: ${{ matrix.image == 'client' && 'NEXT_PUBLIC_API_URL=http://localhost:4000/api/v1' || '' }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,scope=${{ matrix.image }},mode=max
+
+      # Handed to the scan job so it doesn't have to rebuild.
+      - name: Export the image
+        run: docker save "ats-${{ matrix.image }}:${{ github.sha }}" -o "/tmp/ats-${{ matrix.image }}.tar"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: image-${{ matrix.image }}
+          path: /tmp/ats-${{ matrix.image }}.tar
+          retention-days: 1
+
+  # ------------------------------------------------------------ 7. npm audit
+  npm-audit:
+    name: 7 · npm vulnerability audit
+    runs-on: ubuntu-latest
+    needs: [docker-build]
+    strategy:
+      fail-fast: false
+      matrix:
+        dir: [server, client]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      # Fails the build on high or critical advisories; moderate and below are
+      # reported in the log so they stay visible without blocking a release.
+      - name: Audit ${{ matrix.dir }} (fails on high/critical)
+        working-directory: ${{ matrix.dir }}
+        run: npm audit --audit-level=high
+
+      - name: Full advisory report (informational)
+        if: always()
+        working-directory: ${{ matrix.dir }}
+        run: npm audit --audit-level=low || true
+
+      - name: Audit Python dependencies
+        if: matrix.dir == 'server'
+        run: |
+          pip install pip-audit
+          pip-audit -r server/ai/requirements.txt --strict
+
+  # ------------------------------------------------------ 8. image CVE scan
+  image-scan:
+    name: 8 · Container image scan (${{ matrix.image }})
+    runs-on: ubuntu-latest
+    needs: [npm-audit]
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [api, ai, client]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: image-${{ matrix.image }}
+          path: /tmp
+      - name: Load the built image
+        run: docker load -i "/tmp/ats-${{ matrix.image }}.tar"
+
+      - name: Trivy scan (fails on HIGH/CRITICAL)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ats-${{ matrix.image }}:${{ github.sha }}
+          format: sarif
+          output: trivy-${{ matrix.image }}.sarif
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+      # Uploaded even on failure so findings land in the Security tab.
+      - name: Upload results to code scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-${{ matrix.image }}.sarif
+          category: image-${{ matrix.image }}
+
+  # ------------------------------------------------------------ deploy gate
   deploy-staging:
     name: Deploy staging (manual gate)
     runs-on: ubuntu-latest
-    needs: [docker-build]
+    needs: [image-scan]
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
     environment: staging
     steps:
       - uses: actions/checkout@v4
       - name: Publish deployment artifact metadata
         run: |
-          echo "Images built for ats-ai-platform"
+          echo "All quality gates passed for ${{ github.sha }}."
           echo "Deploy hook: replace this step with your registry push / cloud deploy."
           echo "Suggested:"
           echo "  docker compose push"
-          echo "  OR azure/aws/k8s deploy using the built images"
+          echo "  OR k8s rollout using deploy/k8s/*.yaml"

@@ -1,7 +1,14 @@
 import { Types } from "mongoose";
+import { integrations } from "../../integrations/index.ts";
 import { AppError } from "../../utils/App.Error.ts";
 import Application from "../applications/application.model.ts";
 import Job from "./job.model.ts";
+import {
+  assertCanPost,
+  buildSlug,
+  isAcceptingApplications,
+  normalizeChannels,
+} from "./jobPosting.ts";
 import {
   assertCanApprove,
   assertCanClose,
@@ -129,6 +136,79 @@ export async function closeJob(id: string, actorId: string) {
     at: new Date(),
   });
   await job.save();
+  return job;
+}
+
+/** Publish an approved job to the careers page (and any distribution channels). */
+export async function postJob(
+  id: string,
+  input: {
+    location?: string | undefined;
+    employmentType?:
+      | "full_time"
+      | "part_time"
+      | "contract"
+      | "internship"
+      | undefined;
+    openings?: number | undefined;
+    salaryRange?: string | undefined;
+    channels?: string[] | undefined;
+    closesAt?: string | undefined;
+  },
+) {
+  const job = await Job.findById(id);
+  if (!job) throw new AppError("Job not found", 404, "JOB_NOT_FOUND");
+  assertCanPost(job.status as JobStatus);
+
+  const channels = normalizeChannels(input.channels);
+  job.set("posting", {
+    // Keep the slug stable across re-posts so shared links never break.
+    slug: job.posting?.slug ?? buildSlug(job.title, job._id.toString()),
+    location: input.location ?? job.posting?.location ?? "Remote",
+    employmentType: input.employmentType ?? job.posting?.employmentType ?? "full_time",
+    openings: input.openings ?? job.posting?.openings ?? 1,
+    ...(input.salaryRange !== undefined ? { salaryRange: input.salaryRange } : {}),
+    channels,
+    postedAt: job.posting?.postedAt ?? new Date(),
+    ...(input.closesAt ? { closesAt: new Date(input.closesAt) } : {}),
+  });
+  await job.save();
+
+  for (const channel of channels) {
+    await integrations.email.sendEmail({
+      to: `postings+${channel}@stub.local`,
+      subject: `New posting: ${job.title}`,
+      body: `${job.title} is live at /careers/${job.posting?.slug}`,
+    });
+  }
+
+  return job;
+}
+
+/** Published jobs that are live on the public careers page. */
+export async function listPublicPostings(search?: string) {
+  const jobs = await Job.find({ status: "published", "posting.slug": { $exists: true } })
+    // `status` must be projected — isAcceptingApplications reads it.
+    .select("title description skills department posting status createdAt")
+    .sort({ "posting.postedAt": -1 });
+
+  const live = jobs.filter((job) => isAcceptingApplications(job));
+  if (!search) return live;
+  const needle = search.toLowerCase();
+  return live.filter(
+    (job) =>
+      job.title.toLowerCase().includes(needle) ||
+      (job.skills ?? []).some((s) => s.toLowerCase().includes(needle)),
+  );
+}
+
+export async function getPublicPostingBySlug(slug: string) {
+  const job = await Job.findOne({ "posting.slug": slug }).select(
+    "title description skills department posting status",
+  );
+  if (!job || !isAcceptingApplications(job)) {
+    throw new AppError("Posting not found or closed", 404, "POSTING_NOT_FOUND");
+  }
   return job;
 }
 

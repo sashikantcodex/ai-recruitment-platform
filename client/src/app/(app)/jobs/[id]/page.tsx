@@ -4,10 +4,12 @@ import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
+import MenuItem from "@mui/material/MenuItem";
 import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -15,6 +17,7 @@ import {
   closeJob,
   getJobById,
   getJobRankings,
+  postJob,
   submitJob,
   updateJob,
 } from "@/services/jobs.service";
@@ -34,6 +37,10 @@ export default function JobDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [location, setLocation] = useState("Remote");
+  const [employmentType, setEmploymentType] = useState<
+    "full_time" | "part_time" | "contract" | "internship"
+  >("full_time");
 
   const loadJob = useCallback(async () => {
     try {
@@ -55,10 +62,14 @@ export default function JobDetailPage() {
   }, [jobId]);
 
   useEffect(() => {
-    void loadJob();
+    void (async () => {
+      await loadJob();
+    })();
   }, [loadJob]);
 
-  async function runAction(action: "submit" | "approve" | "close" | "save") {
+  async function runAction(
+    action: "submit" | "approve" | "close" | "save" | "post",
+  ) {
     setBusy(true);
     setError(null);
     setMessage(null);
@@ -78,6 +89,10 @@ export default function JobDetailPage() {
       if (action === "submit") setMessage((await submitJob(jobId)).message);
       if (action === "approve") setMessage((await approveJob(jobId)).message);
       if (action === "close") setMessage((await closeJob(jobId)).message);
+      if (action === "post") {
+        const posted = await postJob(jobId, { location, employmentType });
+        setMessage(`Posted to the careers board at /careers/${posted.posting?.slug}`);
+      }
       await loadJob();
     } catch {
       setError(`Failed to ${action} job`);
@@ -134,6 +149,13 @@ export default function JobDetailPage() {
               Approve / Publish
             </Button>
             <Button
+              variant="contained"
+              disabled={busy || job.status !== "published"}
+              onClick={() => runAction("post")}
+            >
+              {job.posting?.slug ? "Update Posting" : "Post to Careers Board"}
+            </Button>
+            <Button
               color="secondary"
               disabled={busy || job.status === "closed"}
               onClick={() => runAction("close")}
@@ -141,6 +163,43 @@ export default function JobDetailPage() {
               Close
             </Button>
           </Stack>
+
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+            <TextField
+              size="small"
+              label="Posting location"
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+            />
+            <TextField
+              select
+              size="small"
+              label="Employment type"
+              value={employmentType}
+              onChange={(e) =>
+                setEmploymentType(
+                  e.target.value as "full_time" | "part_time" | "contract" | "internship",
+                )
+              }
+              sx={{ minWidth: 180 }}
+            >
+              {["full_time", "part_time", "contract", "internship"].map((value) => (
+                <MenuItem key={value} value={value}>
+                  {value.replace(/_/g, " ")}
+                </MenuItem>
+              ))}
+            </TextField>
+          </Stack>
+
+          {job.posting?.slug ? (
+            <Alert severity="success">
+              Live on the careers board:{" "}
+              <Link href={`/careers/${job.posting.slug}`}>/careers/{job.posting.slug}</Link>
+              {job.posting.channels?.length
+                ? ` · channels: ${job.posting.channels.join(", ")}`
+                : ""}
+            </Alert>
+          ) : null}
 
           {(job.approvalEvents ?? []).length > 0 ? (
             <Box>

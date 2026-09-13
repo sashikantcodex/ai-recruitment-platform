@@ -12,6 +12,7 @@ import { listApplications } from "@/services/applications.service";
 import {
   createInterview,
   generateInterviewQuestions,
+  inviteAiInterview,
   listInterviews,
   saveInterviewScorecard,
   scheduleInterview,
@@ -25,6 +26,7 @@ export default function InterviewsPage() {
   const [selectedId, setSelectedId] = useState("");
   const [scheduledAt, setScheduledAt] = useState("");
   const [notes, setNotes] = useState("");
+  const [mode, setMode] = useState<"live" | "ai">("live");
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -35,7 +37,9 @@ export default function InterviewsPage() {
   }
 
   useEffect(() => {
-    void reload().catch(() => setError("Failed to load interviews"));
+    void (async () => {
+      await reload().catch(() => setError("Failed to load interviews"));
+    })();
   }, []);
 
   const selected = interviews.find((i) => i._id === selectedId) ?? null;
@@ -61,11 +65,21 @@ export default function InterviewsPage() {
               </MenuItem>
             ))}
           </TextField>
+          <TextField
+            select
+            label="Mode"
+            value={mode}
+            onChange={(e) => setMode(e.target.value as "live" | "ai")}
+            sx={{ minWidth: 160 }}
+          >
+            <MenuItem value="live">Live panel</MenuItem>
+            <MenuItem value="ai">AI interview</MenuItem>
+          </TextField>
           <Button
             disabled={!applicationId}
             onClick={async () => {
               try {
-                const created = await createInterview(applicationId);
+                const created = await createInterview(applicationId, mode);
                 setMessage("Interview created");
                 setSelectedId(created._id);
                 await reload();
@@ -92,7 +106,7 @@ export default function InterviewsPage() {
               sx={{ justifyContent: "flex-start" }}
             >
               {item.candidateId?.name ?? "Candidate"} · {item.jobId?.title ?? "Job"} ·{" "}
-              {item.status}
+              {item.mode === "ai" ? "AI" : "Live"} · {item.status}
             </Button>
           ))}
         </Stack>
@@ -142,6 +156,19 @@ export default function InterviewsPage() {
               <Button
                 onClick={async () => {
                   try {
+                    await inviteAiInterview(selected._id);
+                    setMessage("AI interview link emailed to the candidate");
+                    await reload();
+                  } catch {
+                    setError("AI interview invite failed");
+                  }
+                }}
+              >
+                Send AI Interview Link
+              </Button>
+              <Button
+                onClick={async () => {
+                  try {
                     await saveInterviewScorecard(selected._id, {
                       technical: 4,
                       communication: 4,
@@ -168,6 +195,38 @@ export default function InterviewsPage() {
             />
             {selected.meetingUrl ? (
               <Alert severity="info">Meeting: {selected.meetingUrl}</Alert>
+            ) : null}
+            {selected.aiSession?.token ? (
+              <Alert severity="info">
+                AI interview ({selected.aiSession.status}) · /interview/
+                {selected.aiSession.token}
+              </Alert>
+            ) : null}
+            {selected.aiSession?.evaluation?.summary ? (
+              <Stack>
+                <Typography variant="subtitle2">AI evaluation</Typography>
+                <Typography variant="body2">
+                  {selected.aiSession.evaluation.summary}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Recommendation: {selected.aiSession.evaluation.recommendation}
+                </Typography>
+              </Stack>
+            ) : null}
+            {(selected.aiSession?.transcript ?? []).filter((t) => t.answer).length > 0 ? (
+              <Stack>
+                <Typography variant="subtitle2">AI interview transcript</Typography>
+                {(selected.aiSession?.transcript ?? [])
+                  .filter((turn) => turn.answer)
+                  .map((turn, index) => (
+                    <Stack key={`${index}-${turn.question}`} sx={{ mb: 1 }}>
+                      <Typography variant="body2" color="text.secondary">
+                        {turn.question}
+                      </Typography>
+                      <Typography variant="body2">{turn.answer}</Typography>
+                    </Stack>
+                  ))}
+              </Stack>
             ) : null}
             {(selected.questions ?? []).length > 0 ? (
               <Stack>

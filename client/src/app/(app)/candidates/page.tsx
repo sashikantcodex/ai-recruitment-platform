@@ -34,7 +34,9 @@ export default function CandidatesPage() {
   }, []);
 
   useEffect(() => {
-    void load();
+    void (async () => {
+      await load();
+    })();
   }, [load]);
 
   const columns = useMemo<GridColDef[]>(

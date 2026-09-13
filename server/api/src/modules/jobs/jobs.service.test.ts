@@ -98,4 +98,37 @@ describe("jobs.service — CRUD + submit/approve/close + rankings", () => {
     const rankings = await getJobRankings("j1");
     expect(rankings[0]?.aiScore).toBe(90);
   });
+
+  it("listPublicPostings projects status, which the live-posting filter reads", async () => {
+    const query = mockQuery([
+      { title: "Eng", status: "published", posting: { postedAt: new Date() }, skills: [] },
+    ]);
+    Job.find.mockReturnValue(query);
+    const { listPublicPostings } = await import("./jobs.service.ts");
+
+    const postings = await listPublicPostings();
+
+    expect(query.select).toHaveBeenCalledWith(expect.stringContaining("status"));
+    expect(postings).toHaveLength(1);
+  });
+
+  it("listPublicPostings filters by title or skill", async () => {
+    Job.find.mockReturnValue(
+      mockQuery([
+        { title: "Backend Engineer", status: "published", posting: { postedAt: new Date() }, skills: [] },
+        { title: "Designer", status: "published", posting: { postedAt: new Date() }, skills: ["Figma"] },
+      ]),
+    );
+    const { listPublicPostings } = await import("./jobs.service.ts");
+
+    expect(await listPublicPostings("backend")).toHaveLength(1);
+    expect(await listPublicPostings("figma")).toHaveLength(1);
+    expect(await listPublicPostings("rust")).toHaveLength(0);
+  });
+
+  it("postJob rejects a job that is not yet approved", async () => {
+    Job.findById.mockResolvedValue({ status: "draft", save: vi.fn() });
+    const { postJob } = await import("./jobs.service.ts");
+    await expect(postJob("j1", {})).rejects.toThrow(/approved/i);
+  });
 });

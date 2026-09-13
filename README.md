@@ -136,32 +136,60 @@ curl -s http://localhost:8000/health
 
 This is the product story to demo or explain in an interview:
 
+All fifteen stages are implemented and covered end-to-end by
+`server/scripts/integration/pipeline.e2e.sh`, which CI runs against a live stack.
+
+| # | Stage | Where it lives |
+|---|-------|----------------|
+| 1 | JD Creation | `POST /jobs` · JD templates |
+| 2 | JD Approval | `POST /jobs/:id/submit` → `/approve` (audit trail) |
+| 3 | Job Posting | `POST /jobs/:id/post` → public board at `/careers` |
+| 4 | Candidate Sourcing | `/sourcing/campaigns` · AI pool match + outreach |
+| 5 | Application Submission | `POST /public/jobs/:slug/apply` (no login) |
+| 6 | Resume Parsing | AI `/internal/v1/parse` |
+| 7 | AI Screening | AI `/internal/v1/score` · `/jobs/:id/rankings` |
+| 8 | Assessment Test | `/assessments` · token-gated candidate test, auto-graded |
+| 9 | Interview Scheduling | `/interviews/:id/schedule` (calendar + meeting) |
+| 10 | AI / Live Interview | `/interviews/:id/ai-invite` · `/public/interviews/:token` |
+| 11 | Candidate Evaluation | `/evaluations` · blends screening + assessment + interviews |
+| 12 | Offer Generation | `/offers` (AI salary benchmark) |
+| 13 | Offer Acceptance | `/offers/:id/respond` → onboarding packet |
+| 14 | Document Verification | `/onboarding/:id/documents/verify` |
+| 15 | Employee Onboarding | `/onboarding/:id/checklist` |
+
 ```text
-JD Creation → Approval → Job Published
+JD Creation → JD Approval → Job Posting (public careers board)
         ↓
-Candidate apply + resume upload
+Candidate Sourcing (AI pool match → outreach → convert)
         ↓
-AI parse → AI score → Ranking
+Application Submission (self-serve apply + resume upload)
         ↓
-Stage moves (screened → assessment → interview)
+Resume Parsing → AI Screening → Ranking
         ↓
-Interview schedule + AI questions + scorecard
+Assessment Test (token link, auto-graded, gates the interview)
         ↓
-Offer (salary benchmark) → e-sign stub → Accept
+Interview Scheduling → AI or Live Interview
         ↓
-Onboarding checklist + document verification
+Candidate Evaluation (screening + assessment + interview → hire/hold/reject)
+        ↓
+Offer Generation (salary benchmark) → e-sign → Offer Acceptance
+        ↓
+Document Verification → Employee Onboarding
 ```
 
 **UI walkthrough after login as admin:**
 
-1. **Jobs** → Create job → open detail → **Submit** → **Approve** (status `published`)  
-2. **Applications** → Apply with resume (PDF/DOCX/TXT) → see AI score  
-3. Job detail → **AI Candidate Rankings**  
-4. **Interviews** → Create from application → Generate questions → Schedule  
-5. **Offers** → Create → Send → Accept  
-6. **Onboarding** → Complete checklist / verify docs  
-7. **Knowledge** → Ask “What is the senior engineer salary band?”  
-8. **Agents** → Run Recruiter / Interview / HR agent  
+1. **Jobs** → Create job → open detail → **Submit** → **Approve** → **Post to Careers Board**
+2. **Sourcing** → Create campaign → Search talent pool → Send outreach → Convert
+3. `/careers` (logged out) → open the role → apply with a resume
+4. **Applications** → see the AI score; job detail → **AI Candidate Rankings**
+5. **Assessments** → Generate from the JD → Send invite → candidate takes it at `/assessment/[token]`
+6. **Interviews** → Create (AI or Live) → Schedule → **Send AI Interview Link** → candidate answers at `/interview/[token]`
+7. **Evaluations** → Generate → review blended signals → record **hire / hold / reject**
+8. **Offers** → Create → Send → Accept
+9. **Onboarding** → Verify documents / complete checklist
+10. **Knowledge** → Ask about the senior engineer salary band
+11. **Agents** → Run Recruiter / Interview / HR agent  
 
 ---
 
@@ -190,15 +218,26 @@ Enforced in Express via JWT middleware + `requiredRole(...)`.
 | `/login` | Sign in |
 | `/register` | Create account (role select) |
 | `/dashboard` | High-level metrics |
-| `/jobs`, `/jobs/[id]` | Job list, edit JD, workflow, rankings |
+| `/jobs`, `/jobs/[id]` | Job list, edit JD, workflow, posting, rankings |
+| `/sourcing` | Sourcing campaigns, prospects, AI outreach |
 | `/candidates` | Candidate profiles |
 | `/applications` | Applications + stage changes |
-| `/interviews` | Schedule + AI assistant |
+| `/assessments` | Generate tests, invite candidates, review attempts |
+| `/interviews` | Schedule + AI assistant + AI interview session |
+| `/evaluations` | Consolidated scoring and the hire decision |
 | `/offers` | Offer lifecycle |
 | `/onboarding` | Post-accept checklist |
 | `/knowledge` | RAG ingest/query |
 | `/agents` | Agent console |
 | `/settings` | Current user profile (`/auth/me`) |
+
+**Public (no login required):**
+
+| Route | Page |
+|-------|------|
+| `/careers`, `/careers/[slug]` | Careers board and self-service application |
+| `/assessment/[token]` | Candidate assessment, opened from the invite email |
+| `/interview/[token]` | Candidate AI interview, opened from the invite email |
 
 ---
 
@@ -619,13 +658,41 @@ AI_SERVICE_TOKEN=test-token AI_MODE=mock .venv/bin/python -m pytest
 
 | Layer | Framework | Coverage focus |
 |-------|-----------|----------------|
-| API | Vitest + `@vitest/coverage-v8` | Auth, Jobs, Departments, Templates, Applications, Candidates, Interviews, Offers, Onboarding, Knowledge, Agents + middleware |
+| API | Vitest + `@vitest/coverage-v8` | Auth, Jobs, Sourcing, Applications, Assessments, Candidates, Interviews, Evaluations, Offers, Onboarding, Knowledge, Agents + middleware |
 | Client | Vitest + jsdom | Auth/jobs/applications/platform services, storage, AuthContext, useAuthGuard |
-| AI | pytest + pytest-cov | Parse, score, RAG ingest/query, interview, salary, agents, security |
+| AI | pytest + pytest-cov | Parse, score, sourcing, assessment, interview, evaluation, RAG, salary, agents, security |
 
 HTML reports: `server/coverage/`, `client/coverage/`, `server/ai/coverage/`.
 
-CI runs these via [`.github/workflows/ci-cd.yml`](.github/workflows/ci-cd.yml).
+### API integration test — the full 15-stage pipeline
+
+`server/scripts/integration/pipeline.e2e.sh` drives every hiring stage over HTTP
+against a running stack, from JD creation through to onboarding. It asserts the
+stage transitions and the candidate-facing boundaries (no AI score leaked to an
+applicant, no answer key leaked to a test taker), and exits non-zero on any failure.
+
+```bash
+# with MongoDB, the AI service and the API already running
+API_BASE_URL=http://127.0.0.1:4000 bash server/scripts/integration/pipeline.e2e.sh
+```
+
+### CI quality gates
+
+[`.github/workflows/ci-cd.yml`](.github/workflows/ci-cd.yml) chains the gates so a
+failure stops the run at the cheapest point:
+
+| # | Gate | What it runs |
+|---|------|--------------|
+| 1 | TypeScript check | `tsc --noEmit` for the API and the client |
+| 2 | ESLint | `eslint src --max-warnings 0` |
+| 3 | Unit tests | Vitest (API, client) and pytest (AI), in parallel |
+| 4 | API integration tests | the 15-stage walk against Mongo + AI + API |
+| 5 | Next.js build | production build of the client |
+| 6 | Docker build | all three images, plus `docker compose config` |
+| 7 | npm vulnerability audit | `npm audit --audit-level=high` + `pip-audit` |
+| 8 | Container image scan | Trivy, fails on HIGH/CRITICAL, uploads SARIF |
+
+Deployment to staging is gated behind all eight.
 
 ---
 

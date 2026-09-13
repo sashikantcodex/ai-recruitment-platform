@@ -82,3 +82,20 @@ export const getRankings = asyncHandler(async (req: Request, res: Response) => {
   const rankings = await jobsService.getJobRankings(requireParamId(req.params.id));
   res.status(200).json(rankings);
 });
+
+const postingSchema = z.object({
+  location: z.string().optional(),
+  employmentType: z
+    .enum(["full_time", "part_time", "contract", "internship"])
+    .optional(),
+  openings: z.number().int().min(1).optional(),
+  salaryRange: z.string().optional(),
+  channels: z.array(z.string()).optional(),
+  closesAt: z.string().optional(),
+});
+
+export const postJob = asyncHandler(async (req: Request, res: Response) => {
+  const body = postingSchema.parse(req.body ?? {});
+  const job = await jobsService.postJob(requireParamId(req.params.id), body);
+  res.status(200).json(job);
+});

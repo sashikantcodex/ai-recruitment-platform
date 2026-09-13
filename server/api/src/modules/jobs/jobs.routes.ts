@@ -20,6 +20,7 @@ router.put("/:id", authenticate, canManageJobs, ctrl.updateJob);
 router.delete("/:id", authenticate, canManageJobs, ctrl.deleteJob);
 router.post("/:id/submit", authenticate, canManageJobs, ctrl.submitJob);
 router.post("/:id/approve", authenticate, canManageJobs, ctrl.approveJob);
+router.post("/:id/post", authenticate, canManageJobs, ctrl.postJob);
 router.post("/:id/close", authenticate, canManageJobs, ctrl.closeJob);
 
 export default router;

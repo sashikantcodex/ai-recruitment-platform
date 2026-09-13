@@ -1,6 +1,16 @@
 from fastapi import FastAPI
 
-from app.api.v1 import agents, interview, parse, rag, salary, score
+from app.api.v1 import (
+    agents,
+    assessment,
+    evaluation,
+    interview,
+    parse,
+    rag,
+    salary,
+    score,
+    sourcing,
+)
 from app.config import settings
 from app.services.rag import seed_if_empty
 
@@ -34,3 +44,6 @@ app.include_router(rag.router)
 app.include_router(interview.router)
 app.include_router(salary.router)
 app.include_router(agents.router)
+app.include_router(sourcing.router)
+app.include_router(assessment.router)
+app.include_router(evaluation.router)

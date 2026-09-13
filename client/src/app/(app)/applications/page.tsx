@@ -47,7 +47,9 @@ export default function ApplicationsPage() {
   }, []);
 
   useEffect(() => {
-    void loadData();
+    void (async () => {
+      await loadData();
+    })();
   }, [loadData]);
 
   const columns = useMemo<GridColDef[]>(
