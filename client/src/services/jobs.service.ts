@@ -50,6 +50,22 @@ export async function closeJob(id: string) {
   return data;
 }
 
+/** Publish an approved job to the careers board and distribution channels. */
+export async function postJob(
+  id: string,
+  payload: {
+    location?: string;
+    employmentType?: "full_time" | "part_time" | "contract" | "internship";
+    openings?: number;
+    salaryRange?: string;
+    channels?: string[];
+    closesAt?: string;
+  } = {},
+) {
+  const { data } = await http.post<Job>(`/jobs/${id}/post`, payload);
+  return data;
+}
+
 export async function getJobRankings(id: string) {
   const { data } = await http.get(`/jobs/${id}/rankings`);
   return data;

@@ -24,7 +24,9 @@ export default function OnboardingPage() {
   }
 
   useEffect(() => {
-    void reload().catch(() => setError("Failed to load onboarding"));
+    void (async () => {
+      await reload().catch(() => setError("Failed to load onboarding"));
+    })();
   }, []);
 
   return (

@@ -22,7 +22,7 @@ export default function AgentsPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [applications, setApplications] = useState<Application[]>([]);
   const [jobId, setJobId] = useState("");
-  const [applicationId, setApplicationId] = useState("");
+  const [pickedApplicationId, setApplicationId] = useState("");
   const [execute, setExecute] = useState(true);
   const [sendOffer, setSendOffer] = useState(true);
   const [acceptOffer, setAcceptOffer] = useState(false);
@@ -43,7 +43,9 @@ export default function AgentsPage() {
   }, [jobId]);
 
   useEffect(() => {
-    void load();
+    void (async () => {
+      await load();
+    })();
   }, [load]);
 
   const appsForJob = useMemo(
@@ -58,13 +60,11 @@ export default function AgentsPage() {
     [applications, jobId],
   );
 
-  useEffect(() => {
-    if (applicationId && !appsForJob.some((a) => a._id === applicationId)) {
-      setApplicationId(appsForJob[0]?._id ?? "");
-    } else if (!applicationId && appsForJob[0]) {
-      setApplicationId(appsForJob[0]._id);
-    }
-  }, [appsForJob, applicationId]);
+  // Derived during render: a pick made before the job filter changed can fall out of
+  // the list, so fall back to the first match rather than syncing state in an effect.
+  const applicationId = appsForJob.some((a) => a._id === pickedApplicationId)
+    ? pickedApplicationId
+    : (appsForJob[0]?._id ?? "");
 
   async function handleRun() {
     setRunning(true);

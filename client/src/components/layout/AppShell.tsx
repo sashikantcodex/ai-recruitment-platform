@@ -7,6 +7,9 @@ import LogoutIcon from "@mui/icons-material/Logout";
 import MenuBookIcon from "@mui/icons-material/MenuBook";
 import PeopleIcon from "@mui/icons-material/People";
 import PersonSearchIcon from "@mui/icons-material/PersonSearch";
+import QuizIcon from "@mui/icons-material/Quiz";
+import RateReviewIcon from "@mui/icons-material/RateReview";
+import TravelExploreIcon from "@mui/icons-material/TravelExplore";
 import DescriptionIcon from "@mui/icons-material/Description";
 import RocketLaunchIcon from "@mui/icons-material/RocketLaunch";
 import SettingsIcon from "@mui/icons-material/Settings";
@@ -32,9 +35,12 @@ const DRAWER_WIDTH = 240;
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: <DashboardIcon /> },
   { href: "/jobs", label: "Jobs", icon: <WorkIcon /> },
+  { href: "/sourcing", label: "Sourcing", icon: <TravelExploreIcon /> },
   { href: "/candidates", label: "Candidates", icon: <PersonSearchIcon /> },
   { href: "/applications", label: "Applications", icon: <PeopleIcon /> },
+  { href: "/assessments", label: "Assessments", icon: <QuizIcon /> },
   { href: "/interviews", label: "Interviews", icon: <EventIcon /> },
+  { href: "/evaluations", label: "Evaluations", icon: <RateReviewIcon /> },
   { href: "/offers", label: "Offers", icon: <DescriptionIcon /> },
   { href: "/onboarding", label: "Onboarding", icon: <RocketLaunchIcon /> },
   { href: "/knowledge", label: "Knowledge", icon: <MenuBookIcon /> },

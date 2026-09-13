@@ -22,5 +22,7 @@ router.post("/:id/reminder", authenticate, canManage, ctrl.reminder);
 router.post("/:id/questions", authenticate, canManage, ctrl.questions);
 router.post("/:id/scorecard", authenticate, canManage, ctrl.scorecard);
 router.post("/:id/notes-summary", authenticate, canManage, ctrl.notesSummary);
+router.post("/:id/ai-invite", authenticate, canManage, ctrl.inviteAi);
+router.get("/:id/ai-session", authenticate, canManage, ctrl.aiSession);
 
 export default router;

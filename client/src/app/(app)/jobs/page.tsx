@@ -38,7 +38,9 @@ export default function JobsPage() {
   }, []);
 
   useEffect(() => {
-    void loadJobs();
+    void (async () => {
+      await loadJobs();
+    })();
   }, [loadJobs]);
 
   const columns = useMemo<GridColDef[]>(

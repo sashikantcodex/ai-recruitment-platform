@@ -31,7 +31,9 @@ export default function OffersPage() {
   }
 
   useEffect(() => {
-    void reload().catch(() => setError("Failed to load offers"));
+    void (async () => {
+      await reload().catch(() => setError("Failed to load offers"));
+    })();
   }, []);
 
   return (

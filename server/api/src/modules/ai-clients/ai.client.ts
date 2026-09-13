@@ -137,6 +137,192 @@ export async function salaryBenchmark(input: {
   }
 }
 
+export type SourcingMatch = {
+  candidateId: string;
+  name: string;
+  score: number;
+  matchedSkills: string[];
+  missingSkills: string[];
+  rationale: string;
+};
+
+export async function matchSourcingCandidates(input: {
+  jdText: string;
+  skills: string[];
+  location?: string;
+  candidates: Array<{
+    candidateId: string;
+    name: string;
+    skills: string[];
+    summary?: string;
+    location?: string;
+    totalYears?: number;
+  }>;
+}): Promise<SourcingMatch[]> {
+  try {
+    const { data } = await ai.post<{ matches: SourcingMatch[] }>(
+      "/internal/v1/sourcing/match",
+      input,
+    );
+    return data.matches;
+  } catch (err) {
+    mapError(err);
+  }
+}
+
+export async function draftOutreach(input: {
+  candidateName: string;
+  jobTitle: string;
+  company?: string;
+  matchedSkills?: string[];
+  applyUrl?: string;
+}): Promise<{ subject: string; body: string }> {
+  try {
+    const { data } = await ai.post<{ subject: string; body: string }>(
+      "/internal/v1/sourcing/outreach",
+      input,
+    );
+    return data;
+  } catch (err) {
+    mapError(err);
+  }
+}
+
+export type AiAssessmentQuestion = {
+  prompt: string;
+  type: "mcq" | "short" | "code";
+  options: string[];
+  correctIndex: number | null;
+  expected: string;
+  weight: number;
+  skill: string;
+};
+
+export async function generateAssessment(input: {
+  jobTitle: string;
+  jdText: string;
+  skills: string[];
+  numQuestions?: number;
+  difficulty?: "easy" | "medium" | "hard";
+}): Promise<{
+  title: string;
+  durationMinutes: number;
+  passingScore: number;
+  questions: AiAssessmentQuestion[];
+}> {
+  try {
+    const { data } = await ai.post("/internal/v1/assessment/generate", input);
+    return data;
+  } catch (err) {
+    mapError(err);
+  }
+}
+
+export type GradedQuestion = {
+  questionIndex: number;
+  awarded: number;
+  max: number;
+  correct: boolean;
+  feedback: string;
+};
+
+export async function gradeAssessment(input: {
+  questions: Array<{
+    prompt: string;
+    type: "mcq" | "short" | "code";
+    options?: string[];
+    correctIndex?: number | null;
+    expected?: string;
+    weight?: number;
+  }>;
+  answers: Array<{
+    questionIndex: number;
+    selectedIndex?: number | null;
+    response?: string;
+  }>;
+}): Promise<{ score: number; perQuestion: GradedQuestion[]; summary: string }> {
+  try {
+    const { data } = await ai.post("/internal/v1/assessment/grade", input);
+    return data;
+  } catch (err) {
+    mapError(err);
+  }
+}
+
+export async function nextInterviewTurn(input: {
+  jdText: string;
+  skills: string[];
+  plannedQuestions: string[];
+  transcript: Array<{ question: string; answer: string }>;
+  maxQuestions?: number;
+}): Promise<{ question: string; isFinal: boolean; turnIndex: number }> {
+  try {
+    const { data } = await ai.post("/internal/v1/interview/ai-turn", input);
+    return data;
+  } catch (err) {
+    mapError(err);
+  }
+}
+
+export type InterviewEvaluation = {
+  technical: number;
+  communication: number;
+  culture: number;
+  recommendation: "strong_yes" | "yes" | "no" | "strong_no";
+  strengths: string[];
+  concerns: string[];
+  summary: string;
+};
+
+export async function evaluateInterviewTranscript(input: {
+  jdText: string;
+  skills: string[];
+  transcript: Array<{ question: string; answer: string }>;
+}): Promise<InterviewEvaluation> {
+  try {
+    const { data } = await ai.post<InterviewEvaluation>(
+      "/internal/v1/interview/evaluate",
+      input,
+    );
+    return data;
+  } catch (err) {
+    mapError(err);
+  }
+}
+
+export type EvaluationSummary = {
+  overallScore: number;
+  recommendation: "hire" | "hold" | "reject";
+  strengths: string[];
+  concerns: string[];
+  summary: string;
+};
+
+export async function summarizeEvaluation(input: {
+  jobTitle: string;
+  screeningScore?: number | null;
+  assessmentScore?: number | null;
+  interviews: Array<{
+    technical: number;
+    communication: number;
+    culture: number;
+    recommendation: string;
+    source: string;
+  }>;
+  matchedSkills?: string[];
+  missingSkills?: string[];
+}): Promise<EvaluationSummary> {
+  try {
+    const { data } = await ai.post<EvaluationSummary>(
+      "/internal/v1/evaluation/summary",
+      input,
+    );
+    return data;
+  } catch (err) {
+    mapError(err);
+  }
+}
+
 export async function runAgent(input: {
   agent: "recruiter" | "interview" | "hr";
   payload: Record<string, unknown>;

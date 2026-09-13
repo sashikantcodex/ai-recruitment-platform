@@ -23,8 +23,39 @@ export async function listInterviews() {
   return data;
 }
 
-export async function createInterview(applicationId: string) {
-  const { data } = await http.post<Interview>("/interviews", { applicationId });
+export async function createInterview(
+  applicationId: string,
+  mode: "live" | "ai" = "live",
+) {
+  const { data } = await http.post<Interview>("/interviews", { applicationId, mode });
+  return data;
+}
+
+/** Issue an AI interview link and email it to the candidate. */
+export async function inviteAiInterview(id: string, maxQuestions?: number) {
+  const { data } = await http.post<Interview>(`/interviews/${id}/ai-invite`, {
+    ...(maxQuestions !== undefined ? { maxQuestions } : {}),
+  });
+  return data;
+}
+
+export async function getAiInterviewSession(id: string) {
+  const { data } = await http.get<{
+    interviewId: string;
+    mode: string;
+    status: string;
+    token: string;
+    transcript?: Array<{ question: string; answer?: string }>;
+    evaluation?: {
+      technical?: number;
+      communication?: number;
+      culture?: number;
+      recommendation?: string;
+      strengths?: string[];
+      concerns?: string[];
+      summary?: string;
+    };
+  }>(`/interviews/${id}/ai-session`);
   return data;
 }
 
